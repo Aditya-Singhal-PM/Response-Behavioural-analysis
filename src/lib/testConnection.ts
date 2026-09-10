@@ -1,11 +1,12 @@
-// src/lib/testConnection.ts
-import { PROVIDERS } from './providers';
+import { callModel, ModelError } from './providers';
 import type { ProviderId } from './providers';
 
 export type TestResult =
   | { status: 'ok'; sample: string }
+  | { status: 'empty'; message: string }
   | { status: 'auth'; message: string }
   | { status: 'not_found'; message: string }
+  | { status: 'rate_limited'; message: string }
   | { status: 'cors_or_network'; message: string }
   | { status: 'unknown'; message: string };
 
@@ -15,41 +16,54 @@ export async function testConnection(
   apiKey: string,
   model: string
 ): Promise<TestResult> {
-  const provider = PROVIDERS[providerId];
-  const { url, headers, body } = provider.buildRequest({
-    baseUrl,
-    apiKey,
-    model,
-    prompt: 'Reply with just the word OK.',
-  });
-
   try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
+    const reply = await callModel({
+      providerId,
+      baseUrl,
+      apiKey,
+      model,
+      maxTokens: 24,
+      messages: [{ role: 'user', content: 'Reply with just the word OK.' }],
     });
 
-    if (res.status === 401 || res.status === 403) {
-      return { status: 'auth', message: `Authentication failed (${res.status}). Check your API key.` };
+    if (!reply.trim()) {
+      return {
+        status: 'empty',
+        message:
+          'The request succeeded but no text came back. The response shape may differ from what this adapter reads. Open the browser console to see the raw body.',
+      };
     }
-    if (res.status === 404) {
-      return { status: 'not_found', message: 'Endpoint not found (404). Check base URL and model name.' };
-    }
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      return { status: 'unknown', message: `Request failed (${res.status}): ${text.slice(0, 200)}` };
-    }
-
-    const data = await res.json();
-    return { status: 'ok', sample: provider.parseResponse(data) };
+    return { status: 'ok', sample: reply.trim() };
   } catch (err) {
-    // fetch throws with no status on CORS failure or network error —
-    // the browser deliberately hides the real reason
-    return {
-      status: 'cors_or_network',
-      message:
-        'Request failed before a response was received. This usually means CORS blocked the browser call, or the URL/network is unreachable. Check the browser console for the underlying error.',
-    };
+    if (!(err instanceof ModelError)) {
+      return { status: 'unknown', message: String(err) };
+    }
+    if (err.status === null) {
+      return {
+        status: 'cors_or_network',
+        message:
+          'No response arrived. The browser blocks a cross-origin call unless the provider allows it, so this is usually CORS — check the console for the exact rejection. For Azure, add this origin to the resource CORS list. For a self-hosted server, start it with permissive CORS.',
+      };
+    }
+    if (err.status === 401 || err.status === 403) {
+      return {
+        status: 'auth',
+        message: `Authentication rejected (${err.status}). Check the key, and that it is scoped to this model.`,
+      };
+    }
+    if (err.status === 404) {
+      return {
+        status: 'not_found',
+        message:
+          'Endpoint not found (404). Either the base URL has the wrong path, or the model id does not exist on this provider.',
+      };
+    }
+    if (err.status === 429) {
+      return {
+        status: 'rate_limited',
+        message: 'Rate limited (429). The connection works — try again shortly.',
+      };
+    }
+    return { status: 'unknown', message: err.message };
   }
 }
