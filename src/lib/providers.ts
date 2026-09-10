@@ -23,7 +23,7 @@ export const PROVIDERS: Record<ProviderId, ProviderConfig> = {
     defaultBaseUrl: 'https://api.anthropic.com',
     defaultModel: 'claude-sonnet-4-5',
     buildRequest: ({ baseUrl, apiKey, model, prompt }) => ({
-      url: `${baseUrl.replace(/\/$/, '')}/chat/completions`,
+      url: `${baseUrl.replace(/\/$/, '')}/v1/messages`,
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
@@ -65,7 +65,7 @@ export const PROVIDERS: Record<ProviderId, ProviderConfig> = {
     defaultBaseUrl: '',
     defaultModel: '',
     buildRequest: ({ baseUrl, apiKey, model, prompt }) => ({
-      url: `${baseUrl.replace(/\/$/, '')}/v1/chat/completions`,
+      url: `${baseUrl.replace(/\/$/, '')}/chat/completions`,
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
