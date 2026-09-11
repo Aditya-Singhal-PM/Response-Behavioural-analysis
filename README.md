@@ -1,75 +1,45 @@
-# React + TypeScript + Vite
+# Response Behavioural Analysis
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Judge LLM/agent traces against expected behaviour, entirely in the browser.
 
-Currently, two official plugins are available:
+Upload a trace export (xlsx, csv, tsv or jsonl), map its columns, split the
+prompt into instructions/context/request, describe what the agent should do,
+and judge every row against the resulting checks. Failures are grouped into
+patterns with a proposed change for each.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Running it
 
-## React Compiler
+No dependencies beyond the Vite React-TS scaffold. SheetJS is loaded at
+runtime from a CDN, so no `npm install` is needed to add Excel support.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+    npm install
+    npm run dev
 
-## Expanding the ESLint configuration
+## What stays local
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+The API key lives in `sessionStorage` and is discarded when the tab closes.
+The trace file is never uploaded — it is parsed in the browser. The only
+outbound requests are the judge calls to the provider you configure.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+A refresh clears the run. Save a snapshot from the results screen to keep it.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Pipeline
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+1. **Provider** — connect a judge model and verify it responds
+2. **Upload** — parse the export, detect Excel cell truncation
+3. **Columns** — map columns onto the canonical schema
+4. **Segment** — recover the invariant master prompt, split out retrieved context
+5. **Rubric** — turn intent into discrete checkable assertions
+6. **Run** — judge concurrently with adaptive rate limiting
+7. **Results** — bucket distribution, patterns, row-level evidence, exports
 
-```
+## Design notes
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
-```
+- Every finding must quote verbatim supporting text. A failure with no quote
+  is downgraded to an abstain rather than reported.
+- Abstain is a first-class verdict. Pass rate is reported over rows that
+  produced a usable verdict, not over rows in the file.
+- Rows with ground truth are judged against it; rows without are judged
+  against the rubric alone. The two are reported separately.
+- Retrieval-miss versus context-ignored is decided by checking whether the
+  quoted evidence appears in the retrieved context, not by asking the judge.
