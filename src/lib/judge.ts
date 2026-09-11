@@ -97,6 +97,7 @@ Hard rules:
 - Every finding must quote a verbatim span from the reply or the retrieved context as evidence. If you cannot quote supporting text, you must not raise the finding.
 - If the trace does not contain enough information to judge — the retrieved context is missing, the prompt is unreadable, or correctness depends on something not shown — return verdict "abstain" and say what is missing. Abstaining is correct and expected; do not guess.
 - Judge only against the assertions given. Do not apply your own preferences about style or length.
+- A reply saying it cannot find, does not have, or is not sure about the information is NOT by itself evidence of a retrieval failure. Refusing may be exactly correct for a request the corpus was never meant to cover. Only use retrieval-miss or knowledge-gap when an EXPECTED ANSWER is supplied and shows a real answer existed. With no expected answer, return "abstain" and say that you cannot confirm the information should have been available.
 
 Bucket definitions:
 - master-prompt-defect: the instructions themselves are missing or ambiguous about this case
@@ -193,12 +194,25 @@ function reconcileBucket(
   claimed: Bucket,
   trace: Trace,
   evidence: string
-): Bucket {
+): Bucket | null {
   const context = trace.retrievedContext || trace.segments?.retrievedContext || '';
+  const hasReference = Boolean(trace.groundTruth?.trim());
+
+  // Without a reference answer there is nothing in the trace that separates
+  // a genuine retrieval failure from a correct refusal on an out-of-scope
+  // request. Neither bucket is assignable, so the row abstains instead.
+  if (!hasReference && (claimed === 'retrieval-miss' || claimed === 'knowledge-gap')) {
+    return null;
+  }
+
   if (!context) {
-    if (claimed === 'context-ignored') return 'retrieval-miss';
+    // Nothing was retrieved, so the model cannot have ignored it.
+    if (claimed === 'context-ignored') return hasReference ? 'retrieval-miss' : null;
     return claimed;
   }
+
+  // The quoted span being present in the context settles this without
+  // needing the judge's opinion: the fact was there and was not used.
   if (claimed === 'retrieval-miss' && evidence && context.includes(evidence.slice(0, 60))) {
     return 'context-ignored';
   }
@@ -285,10 +299,27 @@ export async function judgeTrace(
     };
   }
 
+  const reconciled =
+    verdict === 'pass' ? 'unclassified' : reconcileBucket(claimedBucket, trace, evidence);
+
+  if (reconciled === null) {
+    return {
+      ...base,
+      verdict: 'abstain',
+      bucket: 'unclassified',
+      remediation: 'no-action',
+      confidence: 0,
+      evidence,
+      reason: parsed.reason ?? '',
+      abstainReason:
+        'The reply reports missing information, but with no expected answer there is no way to tell a retrieval failure from a correct refusal.',
+    };
+  }
+
   return {
     ...base,
     verdict,
-    bucket: verdict === 'pass' ? 'unclassified' : reconcileBucket(claimedBucket, trace, evidence),
+    bucket: reconciled,
     remediation: REMEDIATIONS.includes(parsed.remediation as Remediation)
       ? (parsed.remediation as Remediation)
       : 'no-action',

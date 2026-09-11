@@ -96,23 +96,29 @@ export function MappingScreen() {
       title="Column mapping"
       subtitle="Point each schema field at a column in your file. Input and output are required; the optional ones each unlock a diagnostic that is otherwise unreachable."
       actions={
-        <>
-          <Button onClick={propose} disabled={busy}>
-            {busy ? 'Reading a sample' : 'Propose mapping'}
-          </Button>
-          <Button
-            variant="go"
-            disabled={!requiredMet}
-            onClick={() => {
-              setTraces(buildTraces(rawRows, mapping));
-              goTo('segment');
-            }}
-          >
-            Continue
-          </Button>
-        </>
+        <Button
+          variant="go"
+          disabled={!requiredMet}
+          onClick={() => {
+            setTraces(buildTraces(rawRows, mapping));
+            goTo('segment');
+          }}
+        >
+          Continue
+        </Button>
       }
     >
+      <div className="toolbar">
+        <Button onClick={propose} disabled={busy}>
+          {busy ? 'Reading a sample' : proposed ? 'Propose again' : 'Propose mapping'}
+        </Button>
+        <span className="toolbar-hint">
+          {busy
+            ? 'Asking the model to match your columns'
+            : 'Reads four sample rows, then you check each one. Re-proposing replaces manual edits.'}
+        </span>
+      </div>
+
       {busy && <Spinner label="Asking the model to match your columns" />}
 
       {error && (

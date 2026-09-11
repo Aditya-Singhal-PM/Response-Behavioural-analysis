@@ -4,6 +4,7 @@ import type { SchedulerHandle } from '../lib/judge';
 import { synthesiseClusters } from '../lib/cluster';
 import { useApp } from '../state/AppContext';
 import { Button, Callout, Card, Empty, Field, Stat } from '../components/ui';
+import { StructuralPanel } from '../components/StructuralPanel';
 
 export function RunScreen() {
   const {
@@ -16,6 +17,10 @@ export function RunScreen() {
     addCluster,
     stats,
     goTo,
+    structural,
+    redundant,
+    excludeRedundant,
+    setExcludeRedundant,
   } = useApp();
 
   const [running, setRunning] = useState(false);
@@ -38,7 +43,10 @@ export function RunScreen() {
   }
 
   const cap = Math.max(1, Math.min(Number(limit) || 1, traces.length));
-  const pending = traces.slice(0, cap).filter((t) => !judgedRows.has(t.rowIndex));
+  const pending = traces
+    .slice(0, cap)
+    .filter((t) => !judgedRows.has(t.rowIndex))
+    .filter((t) => !(excludeRedundant && redundant.has(t.rowIndex)));
 
   // Rough estimate from the actual segmented text, so it moves with the data.
   const estTokens = useMemo(() => {
@@ -181,6 +189,27 @@ export function RunScreen() {
         <span>concurrency {concurrency}</span>
         <span>{provider.model}</span>
       </div>
+
+      {structural.length > 0 && (
+        <div className="struct-block">
+          <h3 className="sub-head">Pipeline issues</h3>
+          <StructuralPanel issues={structural} compact />
+          {redundant.size > 0 && (
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={excludeRedundant}
+                onChange={(e) => setExcludeRedundant(e.target.checked)}
+              />
+              <span>
+                Skip {redundant.size} redundant row{redundant.size === 1 ? '' : 's'} when
+                judging. Keeping them counts the same event several times and distorts
+                the pass rate.
+              </span>
+            </label>
+          )}
+        </div>
+      )}
 
       {!running && done === 0 && (
         <div style={{ marginTop: 16 }}>

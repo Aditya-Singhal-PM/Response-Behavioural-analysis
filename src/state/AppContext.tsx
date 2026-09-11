@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useMemo, useState } from 'react
 import type { ReactNode } from 'react';
 import type { ProviderId } from '../lib/providers';
 import { PROVIDERS } from '../lib/providers';
+import { analyseStructure, redundantRows } from '../lib/structural';
 import type {
   Cluster,
   ColumnMapping,
@@ -10,6 +11,7 @@ import type {
   RunStats,
   SegmentTemplate,
   StepId,
+  StructuralIssue,
   Trace,
 } from '../types';
 
@@ -64,6 +66,12 @@ interface AppState {
 
   stats: RunStats;
   reachable: (step: StepId) => boolean;
+
+  /** Deterministic pipeline defects, derived from the traces with no model call. */
+  structural: StructuralIssue[];
+  redundant: Set<number>;
+  excludeRedundant: boolean;
+  setExcludeRedundant: (v: boolean) => void;
 }
 
 const AppContext = createContext<AppState | null>(null);
@@ -89,6 +97,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [assertions, setAssertions] = useState<RubricAssertion[]>([]);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [clusters, setClusters] = useState<Cluster[]>([]);
+  const [excludeRedundant, setExcludeRedundant] = useState(true);
+
+  // Runs on every trace change. Deterministic and cheap, so there is no
+  // reason to make it a separate step the user has to trigger.
+  const structural = useMemo(() => analyseStructure(traces), [traces]);
+  const redundant = useMemo(() => redundantRows(structural), [structural]);
 
   const patchProvider = useCallback((patch: Partial<ProviderState>) => {
     setProviderState((prev) => {
@@ -216,6 +230,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setClusters,
       stats,
       reachable,
+      structural,
+      redundant,
+      excludeRedundant,
+      setExcludeRedundant,
     }),
     [
       step,
@@ -239,6 +257,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addCluster,
       stats,
       reachable,
+      structural,
+      redundant,
+      excludeRedundant,
     ]
   );
 

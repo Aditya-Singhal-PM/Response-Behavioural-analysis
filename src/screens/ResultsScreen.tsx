@@ -5,6 +5,7 @@ import { useApp } from '../state/AppContext';
 import { BUCKET_LABELS } from '../types';
 import type { Bucket, Finding, Verdict } from '../types';
 import { Badge, Button, Callout, Card, Empty, Stat } from '../components/ui';
+import { StructuralPanel } from '../components/StructuralPanel';
 
 type Filter = 'all' | Verdict;
 
@@ -21,6 +22,7 @@ export function ResultsScreen() {
     provider,
     fileName,
     setFeedback,
+    structural,
   } = useApp();
 
   const [filter, setFilter] = useState<Filter>('fail');
@@ -181,6 +183,15 @@ export function ResultsScreen() {
           </div>
         )}
       </Card>
+
+      {structural.length > 0 && (
+        <Card
+          title="Pipeline issues"
+          subtitle="Found without a model call, from the structure of the export alone. Worth clearing first — duplicates in particular distort every number above."
+        >
+          <StructuralPanel issues={structural} />
+        </Card>
+      )}
 
       {clusters.length > 0 && (
         <Card
