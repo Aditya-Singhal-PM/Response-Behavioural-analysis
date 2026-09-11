@@ -204,6 +204,28 @@ export interface RubricAssertion {
   enabled: boolean;
 }
 
+export type StructuralKind =
+  | 'duplicate-context-block'
+  | 'context-fully-duplicated'
+  | 'duplicate-trace-id'
+  | 'duplicate-fire'
+  | 'repeated-request'
+  | 'query-insensitive-retrieval'
+  | 'empty-context'
+  | 'empty-output';
+
+/**
+ * A defect in the trace pipeline rather than in the agent's behaviour.
+ * Found deterministically, with no model call, before judging starts.
+ */
+export interface StructuralIssue {
+  kind: StructuralKind;
+  rowIndexes: number[];
+  count: number;
+  detail: string;
+  evidence: string;
+}
+
 export interface RunStats {
   total: number;
   judged: number;

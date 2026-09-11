@@ -982,3 +982,117 @@ code {
     display: none;
   }
 }
+
+/* --- structural issues: a distinct class from behavioural findings, so
+   they get their own surface treatment rather than reusing .finding --- */
+
+.struct-block {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.sub-head {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.structural-head {
+  margin: 0 0 14px;
+  max-width: 78ch;
+  color: var(--ink-dim);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.struct-row {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.struct-row:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.struct-top {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.struct-rows {
+  color: var(--ink-faint);
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+.struct-detail {
+  margin: 0;
+  max-width: 80ch;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.struct-evidence {
+  margin: 8px 0 0;
+  padding: 9px 11px;
+  max-height: 90px;
+  overflow-y: auto;
+  background: var(--data);
+  border-radius: var(--r-data);
+  color: var(--ink-dim);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.toggle {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 16px;
+  padding: 11px 13px;
+  background: var(--data);
+  border: 1px solid var(--line);
+  border-radius: var(--r-ctl);
+  cursor: pointer;
+}
+
+.toggle input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--live);
+}
+
+.toggle span {
+  color: var(--ink-dim);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+/* --- toolbar: an action on the content below it, kept apart from the
+   footer, which holds the action that leaves the screen --- */
+
+.toolbar {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: -6px 0 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.toolbar-hint {
+  color: var(--ink-faint);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
