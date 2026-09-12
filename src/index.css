@@ -1217,3 +1217,33 @@ code {
   font-size: 10px;
   font-style: italic;
 }
+
+/* --- full judge reason, shown on expand rather than truncated in the header --- */
+
+.reason-block {
+  padding: 12px 14px;
+  background: var(--data);
+  border-left: 2px solid var(--ink-faint);
+  border-radius: 0;
+}
+
+.reason-text {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+/* --- collapsible structural panel --- */
+
+.structural-top {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.structural-top .structural-head {
+  margin: 0;
+}

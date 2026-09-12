@@ -236,7 +236,7 @@ export function ResultsScreen() {
           title="Pipeline issues"
           subtitle="Found without a model call, from the structure of the export alone. Worth clearing first — duplicates in particular distort every number above."
         >
-          <StructuralPanel issues={structural} traces={traces} />
+          <StructuralPanel issues={structural} traces={traces} collapsible />
         </Card>
       )}
 
@@ -344,6 +344,13 @@ export function ResultsScreen() {
 
                 {open && trace && (
                   <div className="finding-body">
+                    <div className="reason-block">
+                      <p className="pane-label">Judge reason</p>
+                      <p className="reason-text">
+                        {f.abstainReason ?? f.reason ?? 'No reason given.'}
+                      </p>
+                    </div>
+
                     {f.evidence && (
                       <div className="evidence">
                         <p className="pane-label">Quoted evidence</p>

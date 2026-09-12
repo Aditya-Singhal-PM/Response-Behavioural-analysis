@@ -66,12 +66,16 @@ export function StructuralPanel({
   issues,
   traces,
   compact,
+  collapsible,
 }: {
   issues: StructuralIssue[];
   traces: Trace[];
   compact?: boolean;
+  /** Starts collapsed behind a summary line, for a long list on the results screen. */
+  collapsible?: boolean;
 }) {
   const [open, setOpen] = useState<number | null>(null);
+  const [expanded, setExpanded] = useState(!collapsible);
   const byRow = new Map(traces.map((t) => [t.rowIndex, t]));
 
   if (issues.length === 0) {
@@ -89,16 +93,39 @@ export function StructuralPanel({
       b.rowIndexes.length - a.rowIndexes.length
   );
 
-  const shown = compact ? sorted.slice(0, 6) : sorted;
   const affected = new Set(issues.flatMap((i) => i.rowIndexes)).size;
+
+  const summary = (
+    <p className="structural-head">
+      {issues.length} issue{issues.length === 1 ? '' : 's'} across {affected} rows.
+      These are defects in how traces were produced or exported, not in what the
+      agent said, so they are counted separately from behavioural findings.
+    </p>
+  );
+
+  if (collapsible && !expanded) {
+    return (
+      <div className="structural">
+        {summary}
+        <button type="button" className="btn btn-quiet btn-sm" onClick={() => setExpanded(true)}>
+          Show {issues.length} issue{issues.length === 1 ? '' : 's'}
+        </button>
+      </div>
+    );
+  }
+
+  const shown = compact ? sorted.slice(0, 6) : sorted;
 
   return (
     <div className="structural">
-      <p className="structural-head">
-        {issues.length} issue{issues.length === 1 ? '' : 's'} across {affected} rows.
-        These are defects in how traces were produced or exported, not in what the
-        agent said, so they are counted separately from behavioural findings.
-      </p>
+      <div className="structural-top">
+        {summary}
+        {collapsible && (
+          <button type="button" className="btn btn-quiet btn-sm" onClick={() => setExpanded(false)}>
+            Collapse
+          </button>
+        )}
+      </div>
 
       {shown.map((issue, i) => {
         const severity = STRUCTURAL_SEVERITY[issue.kind];
