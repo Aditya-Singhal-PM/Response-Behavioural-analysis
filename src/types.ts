@@ -25,6 +25,7 @@ export const STEPS: Step[] = [
 
 export type CanonicalField =
   | 'traceId'
+  | 'feature'
   | 'input'
   | 'output'
   | 'reasoning'
@@ -72,10 +73,16 @@ export const CANONICAL_FIELDS: FieldSpec[] = [
     hint: 'Only if stored in its own column rather than inside the input',
   },
   {
+    key: 'feature',
+    label: 'Feature',
+    required: false,
+    hint: 'Which agent or feature produced this trace. Groups findings and drives the per-feature breakdown',
+  },
+  {
     key: 'traceId',
     label: 'Trace id',
     required: false,
-    hint: 'Unique id per row, used for cross-referencing',
+    hint: 'Unique per row, used for cross-referencing. Not a name — that is Feature',
   },
   {
     key: 'model',
@@ -103,6 +110,7 @@ export interface Segments {
 export interface Trace {
   rowIndex: number;
   traceId: string;
+  feature: string;
   input: string;
   output: string;
   reasoning: string;
@@ -176,6 +184,7 @@ export type JudgeMode = 'reference' | 'reference-free';
 export interface Finding {
   rowIndex: number;
   traceId: string;
+  feature: string;
   mode: JudgeMode;
   verdict: Verdict;
   bucket: Bucket;
@@ -193,6 +202,8 @@ export interface Finding {
 export interface Cluster {
   id: number;
   bucket: Bucket;
+  /** Feature name when mapped, otherwise the prompt version. */
+  scope: string;
   pattern: string;
   rowIndexes: number[];
   proposedPatch: string;
@@ -211,6 +222,7 @@ export type StructuralKind =
   | 'duplicate-fire'
   | 'repeated-request'
   | 'query-insensitive-retrieval'
+  | 'shared-context-by-design'
   | 'empty-context'
   | 'empty-output';
 

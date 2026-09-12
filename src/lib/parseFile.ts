@@ -71,6 +71,45 @@ function parseDelimited(text: string, delimiter: string): string[][] {
   return rows;
 }
 
+/**
+ * Some exports serialise each cell as a JSON string literal: wrapped in
+ * quotes, newlines as the two characters backslash-n, inner quotes as
+ * backslash-quote. Others escape newlines without the quotes. Both are
+ * undone here, otherwise delimiter matching in segmentation cannot work
+ * and the panes show raw escape sequences.
+ */
+export function unescapeCell(value: string): string {
+  const trimmed = value.trim();
+
+  // Whole cell is a JSON string literal — the reliable case, parse it.
+  if (
+    trimmed.length >= 2 &&
+    trimmed.startsWith('"') &&
+    trimmed.endsWith('"') &&
+    trimmed.includes('\\')
+  ) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed === 'string') return parsed;
+    } catch {
+      // Not valid JSON after all; fall through to the pattern replace.
+    }
+  }
+
+  // Escaped newlines without the wrapping quotes. Only unescape when the
+  // literal sequences clearly outnumber real newlines, so a cell that
+  // legitimately mentions "\n" in prose is left alone.
+  const literal = (value.match(/\\n/g) ?? []).length;
+  const real = (value.match(/\n/g) ?? []).length;
+  if (literal === 0 || literal <= real) return value;
+
+  return value
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\t/g, '\t')
+    .replace(/\\"/g, '"');
+}
+
 function toRecords(grid: string[][]): ParsedFile {
   if (grid.length === 0) return { columns: [], rows: [], truncatedCells: 0 };
   const header = grid[0].map((h, i) => (h.trim() ? h.trim() : `column_${i + 1}`));
@@ -82,7 +121,7 @@ function toRecords(grid: string[][]): ParsedFile {
     if (line.every((c) => !c || !c.trim())) continue;
     const rec: Record<string, string> = {};
     header.forEach((col, c) => {
-      const val = line[c] ?? '';
+      const val = unescapeCell(line[c] ?? '');
       if (val.length >= EXCEL_CELL_LIMIT) truncatedCells++;
       rec[col] = val;
     });
@@ -109,7 +148,7 @@ function parseJsonl(text: string): ParsedFile {
     const rec: Record<string, string> = {};
     for (const [k, v] of Object.entries(flatten(obj as Record<string, unknown>))) {
       columnSet.add(k);
-      const s = v == null ? '' : typeof v === 'string' ? v : JSON.stringify(v);
+      const s = unescapeCell(v == null ? '' : typeof v === 'string' ? v : JSON.stringify(v));
       if (s.length >= EXCEL_CELL_LIMIT) truncatedCells++;
       rec[k] = s;
     }

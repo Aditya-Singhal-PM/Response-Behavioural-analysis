@@ -193,7 +193,7 @@ export function RunScreen() {
       {structural.length > 0 && (
         <div className="struct-block">
           <h3 className="sub-head">Pipeline issues</h3>
-          <StructuralPanel issues={structural} compact />
+          <StructuralPanel issues={structural} traces={traces} compact />
           {redundant.size > 0 && (
             <label className="toggle">
               <input

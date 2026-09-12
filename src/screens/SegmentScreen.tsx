@@ -87,7 +87,8 @@ export function SegmentScreen() {
           <Badge tone={seg.matched ? 'ok' : 'warn'}>
             {seg.matched ? 'segmented' : 'not segmented'}
           </Badge>
-          <Badge tone="accent">{current?.promptVersion}</Badge>
+          {current?.feature && <Badge tone="accent">{current.feature}</Badge>}
+          <Badge>{current?.promptVersion}</Badge>
           {current?.groundTruth ? (
             <Badge tone="ok">has ground truth</Badge>
           ) : (

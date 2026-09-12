@@ -1096,3 +1096,102 @@ code {
   font-size: 12.5px;
   line-height: 1.5;
 }
+
+/* --- per-feature table --- */
+
+.feature-table {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.table-tight th,
+.table-tight td {
+  padding: 7px 10px;
+}
+
+.table-tight th:nth-child(2),
+.table-tight th:nth-child(3) {
+  width: auto;
+}
+
+.mono {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- structural issue expansion --- */
+
+.struct-top {
+  cursor: pointer;
+}
+
+.struct-top:hover .struct-caret {
+  color: var(--ink);
+}
+
+.struct-caret {
+  margin-left: auto;
+  color: var(--ink-faint);
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+.issue-detail {
+  margin-top: 12px;
+  padding: 14px;
+  background: var(--data);
+  border: 1px solid var(--line);
+  border-radius: var(--r-ctl);
+}
+
+.issue-detail .panes {
+  margin-top: 12px;
+}
+
+.issue-detail .pane {
+  background: var(--panel);
+}
+
+.row-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.row-tab {
+  min-width: 34px;
+  padding: 3px 8px;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: var(--r-data);
+  color: var(--ink-faint);
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.row-tab:hover {
+  color: var(--ink);
+}
+
+.row-tab-on {
+  border-color: var(--live);
+  color: var(--live);
+}
+
+.row-tab-more {
+  margin-left: 4px;
+  color: var(--ink-faint);
+  font-size: 11.5px;
+}
+
+.issue-meta {
+  margin: 10px 0 0;
+  color: var(--ink-faint);
+  font-family: var(--mono);
+  font-size: 11.5px;
+}

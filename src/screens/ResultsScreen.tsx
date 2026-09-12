@@ -50,6 +50,21 @@ export function ResultsScreen() {
     return { rated: rated.length, pct: Math.round((agreed / rated.length) * 100) };
   }, [findings]);
 
+  const byFeature = useMemo(() => {
+    const map = new Map<string, { judged: number; passed: number; abstained: number; errored: number }>();
+    for (const f of findings) {
+      const key = f.feature || '(no feature)';
+      const e = map.get(key) ?? { judged: 0, passed: 0, abstained: 0, errored: 0 };
+      if (f.verdict === 'pass') { e.judged++; e.passed++; }
+      else if (f.verdict === 'fail') e.judged++;
+      else if (f.verdict === 'abstain') e.abstained++;
+      else e.errored++;
+      map.set(key, e);
+    }
+    return [...map.entries()].sort((a, b) => b[1].judged - a[1].judged);
+  }, [findings]);
+  const hasFeatures = byFeature.some(([k]) => k !== '(no feature)');
+
   const modeSplit = useMemo(() => {
     const ref = findings.filter((f) => f.mode === 'reference');
     const free = findings.filter((f) => f.mode === 'reference-free');
@@ -166,6 +181,36 @@ export function ResultsScreen() {
           </div>
         )}
 
+        {hasFeatures && byFeature.length > 1 && (
+          <div className="feature-table">
+            <p className="pane-label">By feature</p>
+            <table className="table table-tight">
+              <thead>
+                <tr>
+                  <th>Feature</th>
+                  <th>Judged</th>
+                  <th>Pass rate</th>
+                  <th>Abstained</th>
+                  <th>Errored</th>
+                </tr>
+              </thead>
+              <tbody>
+                {byFeature.map(([name, e]) => (
+                  <tr key={name}>
+                    <td className="mono">{name}</td>
+                    <td className="mono">{e.judged}</td>
+                    <td className="mono">
+                      {e.judged ? `${Math.round((e.passed / e.judged) * 100)}%` : '—'}
+                    </td>
+                    <td className="mono">{e.abstained}</td>
+                    <td className="mono">{e.errored}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
         {buckets.length > 0 && (
           <div className="bucket-bars">
             {buckets.map(([bucket, count]) => (
@@ -189,7 +234,7 @@ export function ResultsScreen() {
           title="Pipeline issues"
           subtitle="Found without a model call, from the structure of the export alone. Worth clearing first — duplicates in particular distort every number above."
         >
-          <StructuralPanel issues={structural} />
+          <StructuralPanel issues={structural} traces={traces} />
         </Card>
       )}
 
@@ -209,6 +254,7 @@ export function ResultsScreen() {
               <div key={c.id} className="cluster">
                 <div className="cluster-head">
                   <Badge tone="bad">{BUCKET_LABELS[c.bucket]}</Badge>
+                  <Badge tone="accent">{c.scope}</Badge>
                   <span className="cluster-count">
                     {c.rowIndexes.length} failures
                   </span>
@@ -282,7 +328,9 @@ export function ResultsScreen() {
                   >
                     {f.verdict}
                   </Badge>
-                  <span className="finding-id">{f.traceId}</span>
+                  <span className="finding-id">
+                    {f.feature ? `${f.feature} · ` : ''}{f.traceId}
+                  </span>
                   {f.verdict === 'fail' && (
                     <span className="finding-bucket">{BUCKET_LABELS[f.bucket]}</span>
                   )}

@@ -50,17 +50,18 @@ export async function deriveAssertions(
 const MAPPING_SYSTEM = `You map spreadsheet columns onto a fixed schema for LLM trace analysis.
 
 Schema fields:
+- feature: the name of the agent, feature or task that produced the row (a label shared by many rows)
 - input: the full prompt sent to the agent
 - output: the agent's reply
 - reasoning: chain of thought, if stored separately
 - groundTruth: the expected answer or required facts
 - retrievedContext: retrieved documents, only if in their own column
-- traceId: a unique row id
+- traceId: a unique row id (never a name shared across rows — that is feature)
 - model: the model name
 - timestamp: when the trace was recorded
 
 Return only JSON, no prose and no code fences. Use null when no column fits:
-{"input":"col","output":"col","reasoning":null,"groundTruth":null,"retrievedContext":null,"traceId":null,"model":null,"timestamp":null}`;
+{"feature":null,"input":"col","output":"col","reasoning":null,"groundTruth":null,"retrievedContext":null,"traceId":null,"model":null,"timestamp":null}`;
 
 export async function proposeMapping(
   conn: JudgeConnection,
@@ -114,7 +115,9 @@ Bucket definitions:
 - reference-may-be-stale: the reply looks correct and the expected answer looks outdated
 - unclassified: none of the above fit
 
-Return only JSON, no prose and no code fences:
+Output format — this is strict:
+Your entire reply is one JSON object and nothing else. Do not reason out loud first, do not add a preamble, do not wrap it in code fences. The first character of your reply must be { and the last must be }. Put any reasoning inside the "reason" field.
+
 {"verdict":"pass|fail|abstain","bucket":"one of the buckets","remediation":"prompt-patch|add-examples|retrieval-config|author-kb-content|guardrail|schema-enforcement|model-change|upstream-input-validation|no-action","confidence":0.0,"evidence":"verbatim quote or empty string","reason":"one or two sentences","failedAssertions":[]}`;
 
 function truncate(s: string, n: number): string {
@@ -230,6 +233,7 @@ export async function judgeTrace(
   const base = {
     rowIndex: trace.rowIndex,
     traceId: trace.traceId,
+    feature: trace.feature,
     mode,
     promptVersion: trace.promptVersion,
   };
@@ -238,7 +242,7 @@ export async function judgeTrace(
   try {
     raw = await callModel({
       ...conn,
-      maxTokens: 900,
+      maxTokens: 2500,
       signal,
       messages: [
         { role: 'system', content: JUDGE_SYSTEM },
@@ -269,7 +273,7 @@ export async function judgeTrace(
       remediation: 'no-action',
       confidence: 0,
       evidence: '',
-      reason: `Judge reply was not valid JSON: ${raw.slice(0, 160)}`,
+      reason: `The model replied with text that is not JSON, so no verdict could be read. This is the judge model ignoring the output format, not a problem with the trace. A more instruction-following model fixes it. Reply began: "${raw.slice(0, 120).replace(/\s+/g, ' ')}"`,
     };
   }
 
@@ -394,6 +398,7 @@ export function runJudgeQueue(opts: SchedulerOpts): SchedulerHandle {
     return {
       rowIndex: trace.rowIndex,
       traceId: trace.traceId,
+      feature: trace.feature,
       mode: trace.groundTruth?.trim() ? 'reference' : 'reference-free',
       verdict: 'error',
       bucket: 'unclassified',
@@ -418,6 +423,7 @@ export function runJudgeQueue(opts: SchedulerOpts): SchedulerHandle {
           opts.onFinding({
             rowIndex: trace.rowIndex,
             traceId: trace.traceId,
+            feature: trace.feature,
             mode: 'reference-free',
             verdict: 'error',
             bucket: 'unclassified',

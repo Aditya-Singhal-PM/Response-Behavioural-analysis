@@ -61,6 +61,7 @@ export async function exportWorkbook(input: ExportInput): Promise<void> {
   // Sheet 1 keeps every original column in its original order so the result
   // can be pivoted next to whatever the user already has.
   const judgementCols = [
+    'rba_feature',
     'rba_verdict',
     'rba_bucket',
     'rba_remediation',
@@ -77,6 +78,7 @@ export async function exportWorkbook(input: ExportInput): Promise<void> {
     const f = byRow.get(i);
     traceRows.push([
       ...input.rawColumns.map((c) => cap(row[c])),
+      f?.feature ?? '',
       f?.verdict ?? '',
       f ? BUCKET_LABELS[f.bucket] : '',
       f?.remediation ?? '',
@@ -91,9 +93,10 @@ export async function exportWorkbook(input: ExportInput): Promise<void> {
   });
 
   const clusterRows: unknown[][] = [
-    ['cluster', 'bucket', 'failures', 'pattern', 'proposed change'],
+    ['cluster', 'feature', 'bucket', 'failures', 'pattern', 'proposed change'],
     ...input.clusters.map((c) => [
       c.id,
+      c.scope,
       BUCKET_LABELS[c.bucket],
       c.rowIndexes.length,
       cap(c.pattern),

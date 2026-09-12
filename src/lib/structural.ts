@@ -127,7 +127,7 @@ function checkDuplicateTraceIds(traces: Trace[]): StructuralIssue[] {
       kind: 'duplicate-trace-id' as StructuralKind,
       rowIndexes: rows,
       count: rows.length,
-      detail: `Trace id ${id} appears on ${rows.length} rows. Either the export duplicated it or the same trace was written more than once.`,
+      detail: `Trace id ${id} appears on ${rows.length} rows. If this looks like a name rather than an id, the Trace ID column is mis-mapped — set it to "not mapped" on the Columns step. These rows are still judged.`,
       evidence: id,
     }));
 }
@@ -213,9 +213,13 @@ function checkRefires(traces: Trace[], windowMs: number): StructuralIssue[] {
 }
 
 /**
- * If retrieval returns the same context for materially different questions,
- * it is not responding to the query at all. This is invisible per row and
- * obvious across the corpus.
+ * Identical context for different questions means one of two things: the
+ * retriever is not responding to the query (a bug), or the context is a
+ * deterministic lookup — the same document every obligation on that page
+ * shares — and identical context is by design. The pattern is the same;
+ * the prevalence tells them apart. When most of the corpus shares context
+ * this way, it is the architecture, and it is reported once as low
+ * severity rather than once per group as a defect.
  */
 function checkStaticContext(traces: Trace[]): StructuralIssue[] {
   const byContext = new Map<string, { rows: number[]; queries: Set<string> }>();
@@ -232,15 +236,34 @@ function checkStaticContext(traces: Trace[]): StructuralIssue[] {
     byContext.set(key, entry);
   }
 
-  return [...byContext.values()]
-    .filter((e) => e.rows.length >= 3 && e.queries.size >= 3)
-    .map((e) => ({
-      kind: 'query-insensitive-retrieval' as StructuralKind,
-      rowIndexes: e.rows,
-      count: e.rows.length,
-      detail: `Identical retrieved context served to ${e.queries.size} different questions across ${e.rows.length} rows. Retrieval is not varying with the query.`,
-      evidence: '',
-    }));
+  const groups = [...byContext.values()].filter(
+    (e) => e.rows.length >= 3 && e.queries.size >= 3
+  );
+  if (groups.length === 0) return [];
+
+  const affected = groups.flatMap((g) => g.rows);
+  const withContext = [...byContext.values()].reduce((n, e) => n + e.rows.length, 0);
+  const share = withContext ? affected.length / withContext : 0;
+
+  if (share >= 0.5) {
+    return [
+      {
+        kind: 'shared-context-by-design',
+        rowIndexes: affected.sort((a, b) => a - b),
+        count: groups.length,
+        detail: `${affected.length} of ${withContext} rows share their context with other rows, in ${groups.length} groups. At this prevalence the context is a deterministic lookup rather than a query-driven retrieval — many rows are asking about the same source document. Not a defect, but worth knowing: the judge cannot tell a retrieval miss from a missing document on these rows.`,
+        evidence: '',
+      },
+    ];
+  }
+
+  return groups.map((e) => ({
+    kind: 'query-insensitive-retrieval' as StructuralKind,
+    rowIndexes: e.rows,
+    count: e.rows.length,
+    detail: `Identical retrieved context served to ${e.queries.size} different questions across ${e.rows.length} rows. Retrieval is not varying with the query.`,
+    evidence: '',
+  }));
 }
 
 function checkEmptyFields(traces: Trace[]): StructuralIssue[] {
@@ -299,7 +322,7 @@ export function analyseStructure(
 export function redundantRows(issues: StructuralIssue[]): Set<number> {
   const drop = new Set<number>();
   for (const issue of issues) {
-    if (issue.kind !== 'duplicate-fire' && issue.kind !== 'duplicate-trace-id') continue;
+    if (issue.kind !== 'duplicate-fire') continue;
     const [, ...rest] = [...issue.rowIndexes].sort((a, b) => a - b);
     for (const row of rest) drop.add(row);
   }
@@ -313,6 +336,7 @@ export const STRUCTURAL_LABELS: Record<StructuralKind, string> = {
   'duplicate-fire': 'Same call fired repeatedly',
   'repeated-request': 'Repeated request',
   'query-insensitive-retrieval': 'Retrieval ignores the query',
+  'shared-context-by-design': 'Context shared across rows',
   'empty-context': 'No retrieved context',
   'empty-output': 'Empty reply',
 };
@@ -321,6 +345,7 @@ export const STRUCTURAL_SEVERITY: Record<StructuralKind, 'high' | 'medium' | 'lo
   'duplicate-fire': 'high',
   'duplicate-trace-id': 'high',
   'query-insensitive-retrieval': 'high',
+  'shared-context-by-design': 'low',
   'context-fully-duplicated': 'high',
   'duplicate-context-block': 'medium',
   'empty-output': 'medium',

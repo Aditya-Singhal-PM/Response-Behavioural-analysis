@@ -24,7 +24,10 @@ export function groupFindings(findings: Finding[]): Map<string, Finding[]> {
   const groups = new Map<string, Finding[]>();
   for (const f of findings) {
     if (f.verdict !== 'fail') continue;
-    const key = `${f.bucket}::${f.promptVersion ?? 'v-none'}`;
+    // A human-readable feature name is a better grouping key than the
+    // derived prompt hash, so it wins when the column was mapped.
+    const scope = f.feature || f.promptVersion || 'v-none';
+    const key = `${f.bucket}::${scope}`;
     const list = groups.get(key) ?? [];
     list.push(f);
     groups.set(key, list);
@@ -45,7 +48,8 @@ export async function synthesiseClusters(
   let id = 0;
 
   for (const [key, group] of groups.slice(0, 12)) {
-    const bucket = key.split('::')[0] as Bucket;
+    const [bucketKey, scope] = key.split('::');
+    const bucket = bucketKey as Bucket;
     const examples = group.slice(0, 6).map((f) => {
       const t = byRow.get(f.rowIndex);
       return {
@@ -67,7 +71,7 @@ export async function synthesiseClusters(
           { role: 'system', content: SYNTHESIS_SYSTEM },
           {
             role: 'user',
-            content: `Bucket: ${BUCKET_LABELS[bucket]}\nFailure count: ${
+            content: `Bucket: ${BUCKET_LABELS[bucket]}\nFeature: ${scope}\nFailure count: ${
               group.length
             }\n\nExamples:\n${JSON.stringify(examples, null, 2)}`,
           },
@@ -85,6 +89,7 @@ export async function synthesiseClusters(
     const cluster: Cluster = {
       id: id++,
       bucket,
+      scope,
       pattern,
       rowIndexes: group.map((f) => f.rowIndex),
       proposedPatch: patch,

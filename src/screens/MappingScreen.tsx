@@ -16,6 +16,7 @@ function buildTraces(
   return rows.map((row, i) => ({
     rowIndex: i,
     traceId: get(row, 'traceId') || `row-${i + 2}`,
+    feature: get(row, 'feature'),
     input: get(row, 'input'),
     output: get(row, 'output'),
     reasoning: get(row, 'reasoning'),

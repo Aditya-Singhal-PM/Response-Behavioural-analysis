@@ -3,6 +3,11 @@ import type { SegmentTemplate, Segments, Trace } from '../types';
 /** Delimiters seen in real prompt assembly, tried in order of specificity. */
 const CANDIDATE_DELIMITERS: [string, string][] = [
   ['<documents>', '</documents>'],
+  // Fenced blocks: prompts that embed a table or document as markdown.
+  ['```markdown\n', '```'],
+  ['```json\n', '```'],
+  ['```text\n', '```'],
+  ['```\n', '```'],
   ['<context>', '</context>'],
   ['<retrieved_context>', '</retrieved_context>'],
   ['### Context', '### Question'],

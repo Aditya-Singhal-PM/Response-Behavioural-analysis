@@ -60,12 +60,25 @@ function anthropicBody(model: string, messages: ChatMessage[], maxTokens: number
   };
 }
 
-function openAiBody(model: string, messages: ChatMessage[], maxTokens: number) {
-  return {
+function openAiBody(
+  model: string,
+  messages: ChatMessage[],
+  maxTokens: number,
+  baseUrl = ''
+) {
+  const body: Record<string, unknown> = {
     model,
     max_tokens: maxTokens,
     messages: messages.map((m) => ({ role: m.role, content: m.content })),
   };
+  // OpenRouter exposes a reasoning switch. The judge wants a short JSON
+  // object, and a model that reasons first will spend the whole budget on
+  // the reasoning and return the answer field empty. Scoped to OpenRouter
+  // because other OpenAI-compatible servers may reject unknown fields.
+  if (/openrouter\.ai/i.test(baseUrl)) {
+    body.reasoning = { enabled: false };
+  }
+  return body;
 }
 
 /**
@@ -137,7 +150,7 @@ export const PROVIDERS: Record<ProviderId, ProviderConfig> = {
         'HTTP-Referer': window.location.origin,
         'X-Title': 'Response Behavioural Analysis',
       },
-      body: openAiBody(model, messages, maxTokens),
+      body: openAiBody(model, messages, maxTokens, baseUrl),
     }),
     parseResponse: openAiParse,
   },
@@ -202,7 +215,34 @@ export async function callModel(opts: ModelCallOpts): Promise<string> {
   }
 
   const data = await res.json();
-  return provider.parseResponse(data);
+  const text = provider.parseResponse(data);
+  if (text.trim()) return text;
+
+  // Empty answer. Distinguish the causes, because they need different fixes.
+  const finish = readPath(data, ['choices', 0, 'finish_reason']);
+  const stop = readPath(data, ['stop_reason']);
+  const hadReasoning =
+    Boolean(readPath(data, ['choices', 0, 'message', 'reasoning'])) ||
+    Boolean(readPath(data, ['choices', 0, 'message', 'reasoning_details']));
+
+  if (finish === 'length' || stop === 'max_tokens') {
+    throw new ModelError(
+      hadReasoning
+        ? 'The model used its whole token budget on reasoning and returned no answer. Reasoning has been disabled for OpenRouter; if this persists, pick a non-reasoning model.'
+        : 'The model hit the token limit before producing any answer text.',
+      res.status
+    );
+  }
+  if (hadReasoning) {
+    throw new ModelError(
+      'The model returned reasoning but no answer text. Pick a model that does not reason before replying, or one that puts its answer in the content field.',
+      res.status
+    );
+  }
+  throw new ModelError(
+    `The model returned an empty reply (finish_reason: ${String(finish ?? stop ?? 'unknown')}).`,
+    res.status
+  );
 }
 
 /**
