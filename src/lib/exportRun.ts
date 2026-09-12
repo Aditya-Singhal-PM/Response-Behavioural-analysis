@@ -35,6 +35,7 @@ export interface ExportInput {
   findings: Finding[];
   clusters: Cluster[];
   assertions: RubricAssertion[];
+  background: string[];
   intent: string;
   model: string;
   baseUrl: string;
@@ -122,6 +123,7 @@ export async function exportWorkbook(input: ExportInput): Promise<void> {
       `assertion ${i + 1}${a.enabled ? '' : ' (disabled)'}`,
       cap(a.text),
     ]),
+    ...input.background.map((b, i) => [`background ${i + 1}`, cap(b)]),
   ];
 
   const problemRows: unknown[][] = [

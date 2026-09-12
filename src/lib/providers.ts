@@ -23,6 +23,7 @@ export interface ProviderConfig {
     model: string;
     messages: ChatMessage[];
     maxTokens: number;
+    disableReasoning?: boolean;
   }) => BuiltRequest;
   parseResponse: (data: unknown) => string;
 }
@@ -60,22 +61,32 @@ function anthropicBody(model: string, messages: ChatMessage[], maxTokens: number
   };
 }
 
+// Models on OpenRouter that spend their whole token budget reasoning and
+// return an empty answer unless reasoning is explicitly turned off. This is
+// the exception, not the default: most models either have no reasoning
+// mode, or reasoning is optional and off by default. A few models — seen
+// so far on certain auto-routed free-tier backends — go the other way and
+// reject the request if reasoning is disabled, so the flag is only sent
+// for models known to need it, never sent otherwise, and dropped
+// automatically if the provider still rejects it.
+const FORCE_REASONING_OFF = [/nemotron/i, /nvidia\//i];
+
 function openAiBody(
   model: string,
   messages: ChatMessage[],
   maxTokens: number,
-  baseUrl = ''
+  baseUrl = '',
+  disableReasoning = false
 ) {
   const body: Record<string, unknown> = {
     model,
     max_tokens: maxTokens,
     messages: messages.map((m) => ({ role: m.role, content: m.content })),
   };
-  // OpenRouter exposes a reasoning switch. The judge wants a short JSON
-  // object, and a model that reasons first will spend the whole budget on
-  // the reasoning and return the answer field empty. Scoped to OpenRouter
-  // because other OpenAI-compatible servers may reject unknown fields.
-  if (/openrouter\.ai/i.test(baseUrl)) {
+  const isOpenRouter = /openrouter\.ai/i.test(baseUrl);
+  const shouldDisable =
+    isOpenRouter && (disableReasoning || FORCE_REASONING_OFF.some((re) => re.test(model)));
+  if (shouldDisable) {
     body.reasoning = { enabled: false };
   }
   return body;
@@ -138,20 +149,30 @@ export const PROVIDERS: Record<ProviderId, ProviderConfig> = {
 
   'openai-compatible': {
     id: 'openai-compatible',
-    label: 'OpenAI-compatible (OpenRouter, self-hosted, other)',
+    label: 'OpenAI-compatible (OpenRouter, Hugging Face, self-hosted)',
     defaultBaseUrl: 'https://openrouter.ai/api/v1',
     defaultModel: 'openrouter/free',
     hint: 'Include the version path. Only /chat/completions is added.',
-    buildRequest: ({ baseUrl, apiKey, model, messages, maxTokens }) => ({
-      url: `${trimSlash(baseUrl)}/chat/completions`,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-        'HTTP-Referer': window.location.origin,
-        'X-Title': 'Response Behavioural Analysis',
-      },
-      body: openAiBody(model, messages, maxTokens, baseUrl),
-    }),
+    buildRequest: ({ baseUrl, apiKey, model, messages, maxTokens, disableReasoning }) => {
+      const isOpenRouter = /openrouter\.ai/i.test(baseUrl);
+      return {
+        url: `${trimSlash(baseUrl)}/chat/completions`,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+          // Attribution headers OpenRouter asks for. Sent only to OpenRouter,
+          // because extra headers widen the CORS preflight and other hosts
+          // may not allow them.
+          ...(isOpenRouter
+            ? {
+                'HTTP-Referer': window.location.origin,
+                'X-Title': 'Response Behavioural Analysis',
+              }
+            : {}),
+        },
+        body: openAiBody(model, messages, maxTokens, baseUrl, disableReasoning),
+      };
+    },
     parseResponse: openAiParse,
   },
 };
@@ -164,6 +185,8 @@ export interface ModelCallOpts {
   messages: ChatMessage[];
   maxTokens?: number;
   signal?: AbortSignal;
+  /** Set true only after the provider has rejected a request for requiring reasoning to stay on. */
+  disableReasoning?: boolean;
 }
 
 export class ModelError extends Error {
@@ -185,6 +208,7 @@ export async function callModel(opts: ModelCallOpts): Promise<string> {
     model: opts.model,
     messages: opts.messages,
     maxTokens: opts.maxTokens ?? 1600,
+    disableReasoning: opts.disableReasoning,
   });
 
   let res: Response;
@@ -207,6 +231,23 @@ export async function callModel(opts: ModelCallOpts): Promise<string> {
     const retryAfter = res.headers.get('retry-after');
     const retryAfterMs = retryAfter ? Number(retryAfter) * 1000 : null;
     const text = await res.text().catch(() => '');
+
+    // A model that mandates reasoning and rejects the disable flag gets a
+    // clear, specific message rather than a raw 400 dump, since this is a
+    // fixable request shape rather than an auth or path problem.
+    if (
+      body &&
+      typeof body === 'object' &&
+      (body as Record<string, unknown>).reasoning &&
+      /reasoning/i.test(text) &&
+      /(mandatory|required|cannot be disabled)/i.test(text)
+    ) {
+      throw new ModelError(
+        `This model requires reasoning to stay enabled, but it was sent disabled. ${text.slice(0, 200)}`,
+        res.status
+      );
+    }
+
     throw new ModelError(
       `Provider returned ${res.status}. ${text.slice(0, 300)}`,
       res.status,

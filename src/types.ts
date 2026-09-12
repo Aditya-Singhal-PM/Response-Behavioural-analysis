@@ -223,6 +223,8 @@ export type StructuralKind =
   | 'repeated-request'
   | 'query-insensitive-retrieval'
   | 'shared-context-by-design'
+  | 'output-schema-drift'
+  | 'output-not-structured'
   | 'empty-context'
   | 'empty-output';
 

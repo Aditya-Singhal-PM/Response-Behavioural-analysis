@@ -20,6 +20,7 @@ export interface ProviderState {
   baseUrl: string;
   model: string;
   apiKey: string;
+  maxTokens: number;
   verified: boolean;
 }
 
@@ -54,6 +55,8 @@ interface AppState {
   setIntent: (s: string) => void;
   assertions: RubricAssertion[];
   setAssertions: (a: RubricAssertion[]) => void;
+  background: string[];
+  setBackground: (b: string[]) => void;
 
   findings: Finding[];
   addFinding: (f: Finding) => void;
@@ -84,6 +87,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     baseUrl: PROVIDERS['openai-compatible'].defaultBaseUrl,
     model: PROVIDERS['openai-compatible'].defaultModel,
     apiKey: sessionStorage.getItem(KEY_STORAGE) ?? '',
+    maxTokens: 2000,
     verified: false,
   }));
   const [fileName, setFileName] = useState<string | null>(null);
@@ -95,6 +99,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [template, setTemplate] = useState<SegmentTemplate | null>(null);
   const [intent, setIntent] = useState('');
   const [assertions, setAssertions] = useState<RubricAssertion[]>([]);
+  const [background, setBackground] = useState<string[]>([]);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [excludeRedundant, setExcludeRedundant] = useState(true);
@@ -221,6 +226,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setIntent,
       assertions,
       setAssertions,
+      background,
+      setBackground,
       findings,
       addFinding,
       setFindings,
@@ -250,6 +257,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       template,
       intent,
       assertions,
+      background,
       findings,
       addFinding,
       setFeedback,

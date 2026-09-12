@@ -16,35 +16,44 @@ export interface JudgeConnection {
   baseUrl: string;
   apiKey: string;
   model: string;
+  /** From the setup screen. Each call site still floors this at what that call needs. */
+  maxTokens?: number;
 }
 
-const ASSERTION_SYSTEM = `You convert a description of an AI agent's intended behaviour into discrete, independently checkable assertions.
+const ASSERTION_SYSTEM = `You read a description of an AI agent and separate it into two things.
 
-Rules:
-- Each assertion must be checkable against a single request and its reply, with a yes or no answer.
-- Split compound expectations into separate assertions.
-- Cover correctness, grounding, scope and refusal, and output format, but only where the description implies them. Do not invent expectations the description does not support.
-- Write each assertion as an imperative statement about the reply.
-- Return between 4 and 12 assertions.
+ASSERTIONS are checks. Each one must be answerable yes or no by looking at a single request and its reply. Split compound expectations. Write each as an imperative statement about the reply. Cover correctness, grounding, scope and refusal, and output format, but only where the description implies them. Between 4 and 12.
+
+BACKGROUND is everything else the judge must know to read the traces correctly but cannot check on a single row: how the agent's inputs are produced, what fields or scores mean, what the agent is for, conventions in its output, which parts of the request were supplied by the system rather than the user. Write each as a short factual note. Zero to 8 notes.
+
+Anything the author marks as context, background, or "for the judge to remember" goes in BACKGROUND, never ASSERTIONS. A statement about consistency across many traces is BACKGROUND, because one row cannot show it.
 
 Return only JSON, no prose and no code fences:
-{"assertions": ["...", "..."]}`;
+{"assertions": ["..."], "background": ["..."]}`;
+
+export interface DerivedRubric {
+  assertions: string[];
+  background: string[];
+}
 
 export async function deriveAssertions(
   conn: JudgeConnection,
   intent: string
-): Promise<string[]> {
+): Promise<DerivedRubric> {
   const raw = await callModel({
     ...conn,
-    maxTokens: 1200,
+    maxTokens: 1600,
     messages: [
       { role: 'system', content: ASSERTION_SYSTEM },
       { role: 'user', content: `Agent description:\n\n${intent}` },
     ],
   });
-  const parsed = extractJson<{ assertions?: unknown }>(raw);
-  const list = Array.isArray(parsed.assertions) ? parsed.assertions : [];
-  return list.filter((a): a is string => typeof a === 'string' && a.trim().length > 0);
+  const parsed = extractJson<{ assertions?: unknown; background?: unknown }>(raw);
+  const strings = (v: unknown) =>
+    (Array.isArray(v) ? v : []).filter(
+      (a): a is string => typeof a === 'string' && a.trim().length > 0
+    );
+  return { assertions: strings(parsed.assertions), background: strings(parsed.background) };
 }
 
 const MAPPING_SYSTEM = `You map spreadsheet columns onto a fixed schema for LLM trace analysis.
@@ -128,10 +137,19 @@ function truncate(s: string, n: number): string {
 function buildJudgeUser(
   trace: Trace,
   assertions: RubricAssertion[],
+  background: string[],
   mode: JudgeMode
 ): string {
   const seg = trace.segments;
   const parts: string[] = [];
+
+  if (background.length > 0) {
+    parts.push(
+      `ABOUT THIS AGENT\nThese notes describe how the agent and its inputs work. Use them to interpret the trace. They are not checks.\n${background
+        .map((b) => `- ${b}`)
+        .join('\n')}`
+    );
+  }
 
   parts.push(
     `EXPECTATIONS\n${assertions
@@ -226,6 +244,7 @@ export async function judgeTrace(
   conn: JudgeConnection,
   trace: Trace,
   assertions: RubricAssertion[],
+  background: string[],
   signal?: AbortSignal
 ): Promise<Finding> {
   const mode: JudgeMode = trace.groundTruth?.trim() ? 'reference' : 'reference-free';
@@ -242,11 +261,11 @@ export async function judgeTrace(
   try {
     raw = await callModel({
       ...conn,
-      maxTokens: 2500,
+      maxTokens: Math.max(2500, conn.maxTokens ?? 0),
       signal,
       messages: [
         { role: 'system', content: JUDGE_SYSTEM },
-        { role: 'user', content: buildJudgeUser(trace, assertions, mode) },
+        { role: 'user', content: buildJudgeUser(trace, assertions, background, mode) },
       ],
     });
   } catch (err) {
@@ -345,6 +364,7 @@ export interface SchedulerOpts {
   conn: JudgeConnection;
   traces: Trace[];
   assertions: RubricAssertion[];
+  background: string[];
   startConcurrency?: number;
   onFinding: (f: Finding) => void;
   onConcurrencyChange?: (n: number) => void;
@@ -370,7 +390,13 @@ export function runJudgeQueue(opts: SchedulerOpts): SchedulerHandle {
   async function attempt(trace: Trace): Promise<Finding> {
     let delay = 1000;
     for (let tries = 0; tries < 4; tries++) {
-      const finding = await judgeTrace(opts.conn, trace, opts.assertions, controller.signal);
+      const finding = await judgeTrace(
+        opts.conn,
+        trace,
+        opts.assertions,
+        opts.background,
+        controller.signal
+      );
       const rateLimited =
         finding.verdict === 'error' && /\b429\b/.test(finding.reason);
       const serverError =

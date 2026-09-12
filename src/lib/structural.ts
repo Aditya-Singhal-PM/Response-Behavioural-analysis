@@ -266,6 +266,104 @@ function checkStaticContext(traces: Trace[]): StructuralIssue[] {
   }));
 }
 
+/** Pull the first JSON object out of a reply, tolerating fences and prose. */
+function parseOutputJson(output: string): Record<string, unknown> | null {
+  const text = output.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+  const from = text.indexOf('{');
+  if (from === -1) return null;
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = from; i < text.length; i++) {
+    const ch = text[i];
+    if (esc) { esc = false; continue; }
+    if (ch === '\\') { esc = true; continue; }
+    if (ch === '"') inStr = !inStr;
+    if (inStr) continue;
+    if (ch === '{') depth++;
+    if (ch === '}') {
+      depth--;
+      if (depth === 0) {
+        try {
+          const v = JSON.parse(text.slice(from, i + 1));
+          return v && typeof v === 'object' && !Array.isArray(v) ? v : null;
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function keyShape(obj: Record<string, unknown>): string {
+  return Object.keys(obj).sort().join('|');
+}
+
+/**
+ * An agent that emits structured output should emit the same structure
+ * every time. One row cannot show drift; the corpus can. Rows whose key set
+ * differs from the dominant shape are flagged, and so are rows that were
+ * expected to be JSON but are not.
+ */
+function checkOutputSchemaDrift(traces: Trace[]): StructuralIssue[] {
+  const parsed = traces.map((t) => ({ t, obj: parseOutputJson(t.output) }));
+  const jsonRows = parsed.filter((p) => p.obj !== null);
+
+  // Only meaningful when the agent is clearly a JSON emitter.
+  if (traces.length < 4 || jsonRows.length / traces.length < 0.6) return [];
+
+  const shapes = new Map<string, number[]>();
+  for (const { t, obj } of jsonRows) {
+    const k = keyShape(obj as Record<string, unknown>);
+    const list = shapes.get(k) ?? [];
+    list.push(t.rowIndex);
+    shapes.set(k, list);
+  }
+
+  const [dominantShape, dominantRows] = [...shapes.entries()].sort(
+    (a, b) => b[1].length - a[1].length
+  )[0];
+  const dominantKeys = dominantShape.split('|');
+  const issues: StructuralIssue[] = [];
+
+  const drifted = [...shapes.entries()].filter(([k]) => k !== dominantShape);
+  if (drifted.length > 0) {
+    const rows = drifted.flatMap(([, r]) => r).sort((a, b) => a - b);
+    const examples = drifted.slice(0, 3).map(([k, r]) => {
+      const keys = k.split('|');
+      const missing = dominantKeys.filter((x) => !keys.includes(x));
+      const extra = keys.filter((x) => !dominantKeys.includes(x));
+      const parts = [];
+      if (missing.length) parts.push(`missing ${missing.join(', ')}`);
+      if (extra.length) parts.push(`extra ${extra.join(', ')}`);
+      return `${r.length} row${r.length === 1 ? '' : 's'}: ${parts.join('; ') || 'reordered'}`;
+    });
+    issues.push({
+      kind: 'output-schema-drift',
+      rowIndexes: rows,
+      count: drifted.length,
+      detail: `${dominantRows.length} rows share one output structure (${dominantKeys.length} fields) but ${rows.length} rows use ${drifted.length} other shape${
+        drifted.length === 1 ? '' : 's'
+      }. ${examples.join('. ')}. Downstream code reading these fields will break on the outliers.`,
+      evidence: dominantKeys.join(', '),
+    });
+  }
+
+  const notJson = parsed.filter((p) => p.obj === null && p.t.output.trim());
+  if (notJson.length > 0) {
+    issues.push({
+      kind: 'output-not-structured',
+      rowIndexes: notJson.map((p) => p.t.rowIndex),
+      count: notJson.length,
+      detail: `${jsonRows.length} of ${traces.length} replies are JSON objects, but these ${notJson.length} are not. The agent dropped its output format on them.`,
+      evidence: notJson[0].t.output.slice(0, 200),
+    });
+  }
+
+  return issues;
+}
+
 function checkEmptyFields(traces: Trace[]): StructuralIssue[] {
   const noContext = traces.filter(
     (t) => !(t.retrievedContext || t.segments?.retrievedContext || '').trim()
@@ -309,6 +407,7 @@ export function analyseStructure(
   issues.push(...checkDuplicateTraceIds(traces));
   issues.push(...checkRefires(traces, windowMs));
   issues.push(...checkStaticContext(traces));
+  issues.push(...checkOutputSchemaDrift(traces));
   issues.push(...checkEmptyFields(traces));
 
   return issues;
@@ -337,6 +436,8 @@ export const STRUCTURAL_LABELS: Record<StructuralKind, string> = {
   'repeated-request': 'Repeated request',
   'query-insensitive-retrieval': 'Retrieval ignores the query',
   'shared-context-by-design': 'Context shared across rows',
+  'output-schema-drift': 'Output structure varies across rows',
+  'output-not-structured': 'Reply is not structured output',
   'empty-context': 'No retrieved context',
   'empty-output': 'Empty reply',
 };
@@ -346,6 +447,8 @@ export const STRUCTURAL_SEVERITY: Record<StructuralKind, 'high' | 'medium' | 'lo
   'duplicate-trace-id': 'high',
   'query-insensitive-retrieval': 'high',
   'shared-context-by-design': 'low',
+  'output-schema-drift': 'high',
+  'output-not-structured': 'high',
   'context-fully-duplicated': 'high',
   'duplicate-context-block': 'medium',
   'empty-output': 'medium',

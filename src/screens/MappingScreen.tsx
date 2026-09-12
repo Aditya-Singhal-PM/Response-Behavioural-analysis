@@ -61,6 +61,7 @@ export function MappingScreen() {
           baseUrl: provider.baseUrl,
           apiKey: provider.apiKey,
           model: provider.model,
+          maxTokens: provider.maxTokens,
         },
         rawColumns,
         rawRows

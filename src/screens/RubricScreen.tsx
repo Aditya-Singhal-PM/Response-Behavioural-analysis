@@ -8,7 +8,8 @@ const PLACEHOLDER = `Describe what this agent is meant to do, and what counts as
 For example: this assistant answers questions about our commercial contracts. It must answer only from the clauses provided in the context and cite the clause number it used. If the clauses do not cover the question it must say so rather than reason from general contract knowledge. Anything touching indemnity caps or termination rights must be escalated to a human reviewer instead of answered. Replies should be under 150 words and must not restate the question.`;
 
 export function RubricScreen() {
-  const { intent, setIntent, assertions, setAssertions, provider, goTo } = useApp();
+  const { intent, setIntent, assertions, setAssertions, background, setBackground, provider, goTo } =
+    useApp();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -16,18 +17,20 @@ export function RubricScreen() {
     setBusy(true);
     setError(null);
     try {
-      const list = await deriveAssertions(
+      const derived = await deriveAssertions(
         {
           providerId: provider.providerId,
           baseUrl: provider.baseUrl,
           apiKey: provider.apiKey,
           model: provider.model,
+          maxTokens: provider.maxTokens,
         },
         intent
       );
       setAssertions(
-        list.map((text, i) => ({ id: `a${i}`, text, enabled: true }))
+        derived.assertions.map((text, i) => ({ id: `a${i}`, text, enabled: true }))
       );
+      setBackground(derived.background);
     } catch (err) {
       setError(
         `Could not derive assertions: ${
@@ -61,6 +64,13 @@ export function RubricScreen() {
   }
 
   const enabledCount = assertions.filter((a) => a.enabled && a.text.trim()).length;
+
+  function updateBackground(i: number, text: string) {
+    setBackground(background.map((b, j) => (j === i ? text : b)));
+  }
+  function removeBackground(i: number) {
+    setBackground(background.filter((_, j) => j !== i));
+  }
 
   return (
     <Card
@@ -124,6 +134,35 @@ export function RubricScreen() {
           <Button size="sm" onClick={add} style={{ marginTop: 10 }}>
             Add a check
           </Button>
+
+          <div className="background">
+            <p className="assert-head">
+              Background for the judge — {background.length} note{background.length === 1 ? '' : 's'}
+            </p>
+            <p className="note" style={{ marginTop: 0, marginBottom: 12 }}>
+              Things the judge needs to know to read the traces correctly, but that cannot
+              be checked on one row: how inputs are produced, what a score means, what a
+              field is for. These are shown to the judge on every row but never counted as
+              pass or fail.
+            </p>
+            {background.map((b, i) => (
+              <div key={i} className="assert">
+                <span className="bg-mark">i</span>
+                <textarea
+                  rows={2}
+                  value={b}
+                  placeholder="A factual note about how this agent or its inputs work"
+                  onChange={(e) => updateBackground(i, e.target.value)}
+                />
+                <Button size="sm" variant="danger" onClick={() => removeBackground(i)}>
+                  Remove
+                </Button>
+              </div>
+            ))}
+            <Button size="sm" onClick={() => setBackground([...background, ''])} style={{ marginTop: 10 }}>
+              Add a note
+            </Button>
+          </div>
         </div>
       )}
 

@@ -14,7 +14,8 @@ export async function testConnection(
   providerId: ProviderId,
   baseUrl: string,
   apiKey: string,
-  model: string
+  model: string,
+  maxTokens = 2000
 ): Promise<TestResult> {
   try {
     const reply = await callModel({
@@ -22,7 +23,7 @@ export async function testConnection(
       baseUrl,
       apiKey,
       model,
-      maxTokens: 24,
+      maxTokens,
       messages: [{ role: 'user', content: 'Reply with just the word OK.' }],
     });
 
@@ -30,7 +31,7 @@ export async function testConnection(
       return {
         status: 'empty',
         message:
-          'The request succeeded but no text came back. The response shape may differ from what this adapter reads. Open the browser console to see the raw body.',
+          'The request succeeded but no text came back. If this model reasons before answering, it may have used the whole token budget on that and left no room to reply — raise max tokens above and test again. Otherwise the response shape may differ from what this adapter reads; check the browser console for the raw body.',
       };
     }
     return { status: 'ok', sample: reply.trim() };

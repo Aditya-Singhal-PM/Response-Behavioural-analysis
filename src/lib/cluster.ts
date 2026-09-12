@@ -66,7 +66,7 @@ export async function synthesiseClusters(
     try {
       const raw = await callModel({
         ...conn,
-        maxTokens: 700,
+        maxTokens: Math.max(700, conn.maxTokens ?? 0),
         messages: [
           { role: 'system', content: SYNTHESIS_SYSTEM },
           {

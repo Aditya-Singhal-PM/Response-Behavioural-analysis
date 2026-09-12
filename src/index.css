@@ -1195,3 +1195,25 @@ code {
   font-family: var(--mono);
   font-size: 11.5px;
 }
+
+/* --- background notes for the judge --- */
+
+.background {
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.bg-mark {
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  margin-top: 10px;
+  border: 1px solid var(--line-lit);
+  border-radius: 50%;
+  color: var(--ink-faint);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-style: italic;
+}

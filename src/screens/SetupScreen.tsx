@@ -28,7 +28,8 @@ export function SetupScreen() {
       provider.providerId,
       provider.baseUrl.trim(),
       provider.apiKey.trim(),
-      provider.model.trim()
+      provider.model.trim(),
+      provider.maxTokens
     );
     setResult(r);
     patchProvider({ verified: r.status === 'ok' });
@@ -95,6 +96,24 @@ export function SetupScreen() {
             value={provider.apiKey}
             autoComplete="off"
             onChange={(e) => patchProvider({ apiKey: e.target.value, verified: false })}
+          />
+        </Field>
+
+        <Field
+          label="Max tokens"
+          hint="Applies to this test and to every judge call. Raise it if the model reasons before answering."
+        >
+          <input
+            type="number"
+            min={50}
+            max={8000}
+            step={50}
+            value={provider.maxTokens}
+            onChange={(e) =>
+              patchProvider({
+                maxTokens: Math.max(50, Number(e.target.value) || 2000),
+              })
+            }
           />
         </Field>
       </div>
